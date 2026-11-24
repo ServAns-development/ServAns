@@ -1,0 +1,11 @@
+.gradle/
+build/
+out/
+node_modules/
+dist/
+*.iml
+.idea/
+.vscode/
+run/
+release/
+*.log

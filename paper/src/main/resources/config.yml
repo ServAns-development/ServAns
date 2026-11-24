@@ -1,0 +1,49 @@
+server:
+  id: ''
+  name: 'Minecraft Server'
+web:
+  enabled: true
+  bind-address: 0.0.0.0
+  port: 8804
+  public-base-url: ''
+  trust-proxy-headers: false
+  trusted-proxies: []
+  cors-origins: []
+  rate-limit:
+    requests: 120
+    window-seconds: 60
+  https:
+    enabled: false
+    keystore: keystore.p12
+    keystore-password: ''
+theme:
+  title: ServAns
+  accent-color: '#ededed'
+  logo-url: ''
+database:
+  type: sqlite
+  pool-size: 6
+  file: servans.db
+  mysql:
+    host: 127.0.0.1
+    port: 3306
+    database: servans
+    username: servans
+    password: ''
+    use-ssl: false
+retention:
+  raw-days: 7
+  minute-days: 30
+  hour-days: 365
+collection:
+  interval-seconds: 60
+  world-stats: true
+  online-players: true
+  plugins: true
+  plugin-scan-minutes: 30
+maintenance:
+  interval-seconds: 60
+privacy:
+  store-ips: false
+logging:
+  debug: false

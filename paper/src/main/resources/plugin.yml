@@ -1,0 +1,12 @@
+name: ServAns
+version: '${version}'
+main: xyz.matumaka.servans.paper.ServAnsPlugin
+api-version: '1.21'
+description: Self-hosted Minecraft server analytics
+author: matumaka
+website: https://servans.matumaka.com
+folia-supported: true
+softdepend:
+  - PlaceholderAPI
+  - Vault
+  - LuckPerms
