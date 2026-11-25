@@ -2,6 +2,9 @@
 
 Self-hosted Minecraft server analytics with a bundled web dashboard. ServAns runs entirely inside your Minecraft server or proxy: no external backend, no cloud account.
 
+> [!Warning]
+> This is a dev branch, these guides may be invalid. Same for the code, please compile this only if you know what you're doing.
+
 Current release: **Milestone 1** (collection core)
 
 ## Milestone 1 scope
