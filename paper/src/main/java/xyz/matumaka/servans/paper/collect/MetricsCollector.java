@@ -13,6 +13,7 @@ import xyz.matumaka.servans.common.model.ServerDescriptor;
 import xyz.matumaka.servans.common.model.WorldSample;
 import xyz.matumaka.servans.common.store.DataStore;
 import xyz.matumaka.servans.paper.AsyncWorker;
+import xyz.matumaka.servans.paper.cloud.CloudUploader;
 import xyz.matumaka.servans.paper.schedule.PaperScheduler;
 import xyz.matumaka.servans.paper.schedule.PlatformScheduler;
 
@@ -27,20 +28,22 @@ public final class MetricsCollector {
     private final AsyncWorker worker;
     private final ServerDescriptor descriptor;
     private final ActivityCounters counters;
-    private final CollectionSettings settings;
+    private final CloudUploader uploader;
+    private volatile CollectionSettings settings;
     private final ServAnsLogger logger;
     private final boolean folia;
     private volatile List<PluginEntry> plugins;
     private volatile long pluginsScannedAt;
     private volatile PlatformScheduler.Cancellable task;
 
-    public MetricsCollector(Plugin plugin, DataStore store, PlatformScheduler scheduler, AsyncWorker worker, ServerDescriptor descriptor, ActivityCounters counters, CollectionSettings settings, ServAnsLogger logger, boolean folia) {
+    public MetricsCollector(Plugin plugin, DataStore store, PlatformScheduler scheduler, AsyncWorker worker, ServerDescriptor descriptor, ActivityCounters counters, CloudUploader uploader, CollectionSettings settings, ServAnsLogger logger, boolean folia) {
         this.plugin = plugin;
         this.store = store;
         this.scheduler = scheduler;
         this.worker = worker;
         this.descriptor = descriptor;
         this.counters = counters;
+        this.uploader = uploader;
         this.settings = settings;
         this.logger = logger;
         this.folia = folia;
@@ -51,6 +54,30 @@ public final class MetricsCollector {
             plugins = scanPlugins();
             pluginsScannedAt = System.currentTimeMillis();
         }
+        schedule();
+    }
+
+    /**
+     * Applies settings fetched from the dashboard. Changing the sample interval
+     * reschedules the collection task; other changes take effect on the next sample.
+     */
+    public void applySettings(CollectionSettings next) {
+        if (next == null) {
+            return;
+        }
+        CollectionSettings previous = settings;
+        settings = next;
+        if (next.plugins() && plugins == null) {
+            plugins = scanPlugins();
+            pluginsScannedAt = System.currentTimeMillis();
+        }
+        if (previous != null && previous.intervalSeconds() != next.intervalSeconds() && task != null) {
+            task.cancel();
+            schedule();
+        }
+    }
+
+    private void schedule() {
         task = scheduler.repeatGlobal(this::collect, 5_000L, settings.intervalSeconds() * 1000L);
     }
 
@@ -103,6 +130,7 @@ public final class MetricsCollector {
                 counters.takeLeaves()
             );
             worker.execute(() -> store.recordSample(bundle));
+            uploader.upload(bundle);
         } catch (Throwable error) {
             logger.error("Sample collection failed", error);
         }

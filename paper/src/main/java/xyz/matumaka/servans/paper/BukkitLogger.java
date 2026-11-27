@@ -7,10 +7,14 @@ import java.util.logging.Logger;
 
 final class BukkitLogger implements ServAnsLogger {
     private final Logger logger;
-    private final boolean debug;
+    private volatile boolean debug;
 
     BukkitLogger(Logger logger, boolean debug) {
         this.logger = logger;
+        this.debug = debug;
+    }
+
+    void setDebug(boolean debug) {
         this.debug = debug;
     }
 

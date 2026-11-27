@@ -1,41 +1,37 @@
 package xyz.matumaka.servans.common;
 
 import org.junit.jupiter.api.Test;
+import xyz.matumaka.servans.common.config.CloudSettings;
 import xyz.matumaka.servans.common.config.CollectionSettings;
+import xyz.matumaka.servans.common.config.DatabaseSettings;
+import xyz.matumaka.servans.common.config.DatabaseType;
 import xyz.matumaka.servans.common.config.MaintenanceSettings;
+import xyz.matumaka.servans.common.config.ServerSettings;
+import xyz.matumaka.servans.common.config.Settings;
+import xyz.matumaka.servans.common.config.SettingsJson;
 import xyz.matumaka.servans.common.config.ThemeSettings;
-import xyz.matumaka.servans.common.config.WebSettings;
-
-import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ConfigTest {
     @Test
-    void validatesWebSettings() {
-        WebSettings settings = new WebSettings(false, "", 0, "https://servans.matumaka.com/", true,
-            List.of(" 10.0.0.1 ", ""), List.of(), 0, 0, false, "", null);
-        assertEquals("0.0.0.0", settings.bindAddress());
-        assertEquals(8804, settings.port());
-        assertEquals("https://servans.matumaka.com", settings.publicBaseUrl());
-        assertEquals(List.of("10.0.0.1"), settings.trustedProxies());
-        assertEquals(1, settings.rateLimitRequests());
-        assertEquals(1, settings.rateLimitWindowSeconds());
-        assertEquals("keystore.p12", settings.keystore());
-        assertEquals("", settings.keystorePassword());
-        assertEquals("0.0.0.0:8804", settings.listenAddress());
-    }
+    void validatesCloudSettings() {
+        CloudSettings settings = new CloudSettings(true, "https://servans.example.com///", "  key-123  ", 0);
+        assertEquals("https://servans.example.com", settings.url());
+        assertEquals("key-123", settings.key());
+        assertEquals(1, settings.timeoutSeconds());
+        assertEquals("https://servans.example.com/api/ingest", settings.ingestUrl());
+        assertTrue(settings.configured());
 
-    @Test
-    void acceptsCustomPortsAndOrigins() {
-        WebSettings settings = new WebSettings(true, "127.0.0.1", 8899, "", false,
-            List.of(), List.of("https://Example.com"), 500, 30, true, "custom.p12", "secret");
-        assertEquals(8899, settings.port());
-        assertEquals(500, settings.rateLimitRequests());
-        assertEquals(List.of("https://example.com"), settings.corsOrigins());
-        assertTrue(settings.httpsEnabled());
-        assertEquals("127.0.0.1:8899", settings.listenAddress());
+        CloudSettings defaults = new CloudSettings(true, "", null, 999);
+        assertEquals(CloudSettings.DEFAULT_URL, defaults.url());
+        assertEquals("", defaults.key());
+        assertEquals(60, defaults.timeoutSeconds());
+        assertFalse(defaults.configured());
+
+        assertFalse(new CloudSettings(false, "https://example.com", "key", 10).configured());
     }
 
     @Test
@@ -51,5 +47,37 @@ class ConfigTest {
         assertEquals(60_000L, collection.pluginScanIntervalMillis());
         assertEquals(30, new MaintenanceSettings(1).intervalSeconds());
         assertEquals(3600, new MaintenanceSettings(99_999).intervalSeconds());
+    }
+
+    @Test
+    void parsesDashboardSettings() {
+        Settings base = new Settings(
+            new ServerSettings("my-server", "My Server"),
+            new CloudSettings(true, "https://example.com", "key", 10),
+            null,
+            new DatabaseSettings(DatabaseType.SQLITE, "servans.db", "127.0.0.1", 3306, "servans", "", "", 6, false),
+            null, null, null, null, null
+        );
+        Settings parsed = SettingsJson.parseJson("""
+            {"settings":{
+              "collection":{"intervalSeconds":120,"worldStats":false,"onlinePlayers":true,"plugins":true,"pluginScanMinutes":15},
+              "retention":{"rawDays":3,"minuteDays":10,"hourDays":100},
+              "maintenance":{"intervalSeconds":90},
+              "privacy":{"storeIps":true},
+              "logging":{"debug":true},
+              "theme":{"title":"My SMP","accentColor":"#7c3aed","logoUrl":"https://example.com/logo.png"}
+            }}
+            """, base);
+
+        assertEquals(120, parsed.collection().intervalSeconds());
+        assertFalse(parsed.collection().worldStats());
+        assertEquals(15, parsed.collection().pluginScanMinutes());
+        assertEquals(3, parsed.retention().rawDays());
+        assertEquals(90, parsed.maintenance().intervalSeconds());
+        assertTrue(parsed.privacy().storeIps());
+        assertTrue(parsed.logging().debug());
+        assertEquals("My SMP", parsed.theme().title());
+        assertEquals("#7c3aed", parsed.theme().accentColor());
+        assertEquals("my-server", parsed.server().id());
     }
 }

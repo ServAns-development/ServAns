@@ -4,17 +4,11 @@ import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 import xyz.matumaka.servans.common.ServAnsLogger;
-import xyz.matumaka.servans.common.config.CollectionSettings;
+import xyz.matumaka.servans.common.config.CloudSettings;
 import xyz.matumaka.servans.common.config.DatabaseSettings;
 import xyz.matumaka.servans.common.config.DatabaseType;
-import xyz.matumaka.servans.common.config.LoggingSettings;
-import xyz.matumaka.servans.common.config.MaintenanceSettings;
-import xyz.matumaka.servans.common.config.PrivacySettings;
-import xyz.matumaka.servans.common.config.RetentionSettings;
 import xyz.matumaka.servans.common.config.ServerSettings;
 import xyz.matumaka.servans.common.config.Settings;
-import xyz.matumaka.servans.common.config.ThemeSettings;
-import xyz.matumaka.servans.common.config.WebSettings;
 import xyz.matumaka.servans.common.util.Ids;
 
 import java.io.IOException;
@@ -26,6 +20,10 @@ public final class PaperConfig {
     private PaperConfig() {
     }
 
+    /**
+     * Loads only the bootstrap settings that must exist before the plugin can reach the dashboard.
+     * Collection, retention, maintenance, privacy, logging and theme settings come from the website.
+     */
     public static Settings load(JavaPlugin plugin, ServAnsLogger logger) {
         mergeDefaults(plugin, logger);
         FileConfiguration config = plugin.getConfig();
@@ -44,24 +42,11 @@ public final class PaperConfig {
             plugin.saveConfig();
         }
         String name = config.getString("server.name", "Minecraft Server");
-        WebSettings web = new WebSettings(
-            config.getBoolean("web.enabled", true),
-            config.getString("web.bind-address", "0.0.0.0"),
-            port(config, "web.port", 8804, logger),
-            config.getString("web.public-base-url", ""),
-            config.getBoolean("web.trust-proxy-headers", false),
-            config.getStringList("web.trusted-proxies"),
-            config.getStringList("web.cors-origins"),
-            config.getInt("web.rate-limit.requests", 120),
-            config.getInt("web.rate-limit.window-seconds", 60),
-            config.getBoolean("web.https.enabled", false),
-            config.getString("web.https.keystore", "keystore.p12"),
-            config.getString("web.https.keystore-password", "")
-        );
-        ThemeSettings theme = new ThemeSettings(
-            config.getString("theme.title", "ServAns"),
-            config.getString("theme.accent-color", "#ededed"),
-            config.getString("theme.logo-url", "")
+        CloudSettings cloud = new CloudSettings(
+            config.getBoolean("cloud.enabled", true),
+            config.getString("cloud.url", CloudSettings.DEFAULT_URL),
+            config.getString("cloud.key", ""),
+            config.getInt("cloud.timeout-seconds", 10)
         );
         DatabaseType type = DatabaseType.parse(config.getString("database.type", "sqlite"));
         DatabaseSettings database = new DatabaseSettings(
@@ -75,22 +60,7 @@ public final class PaperConfig {
             config.getInt("database.pool-size", config.getInt("database.mysql.pool-size", 6)),
             config.getBoolean("database.mysql.use-ssl", false)
         );
-        RetentionSettings retention = new RetentionSettings(
-            config.getInt("retention.raw-days", 7),
-            config.getInt("retention.minute-days", 30),
-            config.getInt("retention.hour-days", 365)
-        );
-        CollectionSettings collection = new CollectionSettings(
-            config.getInt("collection.interval-seconds", 60),
-            config.getBoolean("collection.world-stats", true),
-            config.getBoolean("collection.online-players", true),
-            config.getBoolean("collection.plugins", true),
-            config.getInt("collection.plugin-scan-minutes", 30)
-        );
-        MaintenanceSettings maintenance = new MaintenanceSettings(config.getInt("maintenance.interval-seconds", 60));
-        PrivacySettings privacy = new PrivacySettings(config.getBoolean("privacy.store-ips", false));
-        LoggingSettings logging = new LoggingSettings(config.getBoolean("logging.debug", false));
-        return new Settings(new ServerSettings(id, name), web, theme, database, retention, collection, maintenance, privacy, logging);
+        return new Settings(new ServerSettings(id, name), cloud, null, database, null, null, null, null, null);
     }
 
     private static void mergeDefaults(JavaPlugin plugin, ServAnsLogger logger) {
@@ -115,6 +85,14 @@ public final class PaperConfig {
                 }
                 config.set(key, defaults.get(key));
                 changed = true;
+            }
+            for (String key : new String[]{
+                "theme", "retention", "collection", "maintenance", "privacy", "logging"
+            }) {
+                if (config.isSet(key)) {
+                    config.set(key, null);
+                    changed = true;
+                }
             }
             if (changed) {
                 plugin.saveConfig();

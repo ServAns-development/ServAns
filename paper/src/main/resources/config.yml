@@ -1,25 +1,15 @@
+# ServAns only needs the dashboard connection here.
+# Everything else (collection, retention, maintenance, privacy, logging, theme)
+# is configured per server on the dashboard and synced to the plugin.
 server:
   id: ''
   name: 'Minecraft Server'
-web:
+cloud:
   enabled: true
-  bind-address: 0.0.0.0
-  port: 8804
-  public-base-url: ''
-  trust-proxy-headers: false
-  trusted-proxies: []
-  cors-origins: []
-  rate-limit:
-    requests: 120
-    window-seconds: 60
-  https:
-    enabled: false
-    keystore: keystore.p12
-    keystore-password: ''
-theme:
-  title: ServAns
-  accent-color: '#ededed'
-  logo-url: ''
+  url: 'https://servans.matumaka.com'
+  key: ''
+  timeout-seconds: 10
+# Local plugin storage. The dashboard stores its own copy in MongoDB.
 database:
   type: sqlite
   pool-size: 6
@@ -31,19 +21,3 @@ database:
     username: servans
     password: ''
     use-ssl: false
-retention:
-  raw-days: 7
-  minute-days: 30
-  hour-days: 365
-collection:
-  interval-seconds: 60
-  world-stats: true
-  online-players: true
-  plugins: true
-  plugin-scan-minutes: 30
-maintenance:
-  interval-seconds: 60
-privacy:
-  store-ips: false
-logging:
-  debug: false

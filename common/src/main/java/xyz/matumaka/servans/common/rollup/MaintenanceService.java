@@ -33,7 +33,7 @@ public final class MaintenanceService {
 
     private final Database database;
     private final Dialect dialect;
-    private final RetentionSettings retention;
+    private volatile RetentionSettings retention;
     private final ServAnsLogger logger;
 
     public MaintenanceService(Database database, RetentionSettings retention, ServAnsLogger logger) {
@@ -41,6 +41,12 @@ public final class MaintenanceService {
         this.dialect = database.dialect();
         this.retention = retention;
         this.logger = logger;
+    }
+
+    public void updateRetention(RetentionSettings retention) {
+        if (retention != null) {
+            this.retention = retention;
+        }
     }
 
     public void runOnce(long now) {

@@ -9,6 +9,7 @@ import xyz.matumaka.servans.common.db.Migrations;
 import xyz.matumaka.servans.common.model.ServerDescriptor;
 import xyz.matumaka.servans.common.rollup.MaintenanceService;
 import xyz.matumaka.servans.common.store.DataStore;
+import xyz.matumaka.servans.paper.cloud.CloudUploader;
 import xyz.matumaka.servans.paper.collect.ActivityCounters;
 import xyz.matumaka.servans.paper.collect.MetricsCollector;
 import xyz.matumaka.servans.paper.config.PaperConfig;
@@ -18,19 +19,22 @@ import xyz.matumaka.servans.paper.session.SessionTracker;
 
 public final class ServAnsPlugin extends JavaPlugin {
     private ServAnsLogger logger;
-    private Settings settings;
+    private volatile Settings settings;
     private Database database;
     private DataStore store;
     private AsyncWorker worker;
     private PlatformScheduler scheduler;
+    private CloudUploader uploader;
     private MetricsCollector collector;
     private SessionTracker sessions;
     private MaintenanceService maintenance;
+    private PlatformScheduler.Cancellable maintenanceTask;
+    private PlatformScheduler.Cancellable settingsTask;
 
     @Override
     public void onEnable() {
         saveDefaultConfig();
-        logger = new BukkitLogger(getLogger(), getConfig().getBoolean("logging.debug", false));
+        logger = new BukkitLogger(getLogger(), false);
         try {
             settings = PaperConfig.load(this, logger);
             scheduler = PaperScheduler.create(this);
@@ -46,12 +50,18 @@ public final class ServAnsPlugin extends JavaPlugin {
             ActivityCounters counters = new ActivityCounters();
             sessions = new SessionTracker(store, worker, descriptor.id(), counters);
             getServer().getPluginManager().registerEvents(sessions, this);
-            collector = new MetricsCollector(this, store, scheduler, worker, descriptor, counters, settings.collection(), logger, PaperScheduler.isFolia());
+            uploader = new CloudUploader(settings.cloud(), getDescription().getVersion(), logger);
+            collector = new MetricsCollector(this, store, scheduler, worker, descriptor, counters, uploader, settings.collection(), logger, PaperScheduler.isFolia());
             collector.start();
             maintenance = new MaintenanceService(database, settings.retention(), logger);
-            worker.scheduleAtFixedRate(() -> maintenance.runOnce(System.currentTimeMillis()), 30, settings.maintenance().intervalSeconds());
+            scheduleMaintenance(settings.maintenance().intervalSeconds());
+            settingsTask = scheduler.repeatAsync(this::refreshRemoteSettings, 5_000L, 300_000L);
             logger.info("ServAns enabled for " + descriptor.name() + " (" + descriptor.id() + ") using " + database.dialect().name().toLowerCase());
-            logger.debug("Web server configured for " + settings.web().listenAddress() + " with public base " + (settings.web().publicBaseUrl().isBlank() ? "(auto)" : settings.web().publicBaseUrl()));
+            if (uploader.configured()) {
+                logger.info("Sending analytics to " + settings.cloud().url() + " and loading settings from the dashboard");
+            } else {
+                logger.warn("No dashboard key configured. Create a server at " + settings.cloud().url() + ", then paste its key into cloud.key in config.yml.");
+            }
         } catch (Throwable error) {
             logger.error("Could not enable ServAns", error);
             getServer().getPluginManager().disablePlugin(this);
@@ -60,12 +70,24 @@ public final class ServAnsPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        if (settingsTask != null) {
+            settingsTask.cancel();
+            settingsTask = null;
+        }
+        if (maintenanceTask != null) {
+            maintenanceTask.cancel();
+            maintenanceTask = null;
+        }
         if (collector != null) {
             collector.stop();
             collector.sampleNow();
         }
         if (sessions != null) {
             sessions.closeAll();
+        }
+        if (uploader != null) {
+            uploader.close();
+            uploader = null;
         }
         if (worker != null) {
             worker.close();
@@ -87,6 +109,55 @@ public final class ServAnsPlugin extends JavaPlugin {
 
     public PlatformScheduler scheduler() {
         return scheduler;
+    }
+
+    private void refreshRemoteSettings() {
+        CloudUploader current = uploader;
+        if (current == null || !current.configured()) {
+            return;
+        }
+        Settings remote = current.fetchSettings(settings);
+        if (remote != null) {
+            applySettings(remote);
+        }
+    }
+
+    private synchronized void applySettings(Settings next) {
+        if (next == null) {
+            return;
+        }
+        Settings previous = settings;
+        settings = next;
+        if (logger instanceof BukkitLogger bukkit) {
+            bukkit.setDebug(next.logging().debug());
+        }
+        if (collector != null) {
+            collector.applySettings(next.collection());
+        }
+        if (maintenance != null) {
+            maintenance.updateRetention(next.retention());
+        }
+        if (previous == null || previous.maintenance().intervalSeconds() != next.maintenance().intervalSeconds()) {
+            scheduleMaintenance(next.maintenance().intervalSeconds());
+        }
+        logger.debug("Loaded dashboard settings: sample every " + next.collection().intervalSeconds()
+            + "s, maintenance every " + next.maintenance().intervalSeconds() + "s");
+    }
+
+    private void scheduleMaintenance(int intervalSeconds) {
+        if (maintenanceTask != null) {
+            maintenanceTask.cancel();
+        }
+        maintenanceTask = scheduler.repeatAsync(
+            () -> {
+                MaintenanceService current = maintenance;
+                if (current != null) {
+                    current.runOnce(System.currentTimeMillis());
+                }
+            },
+            30_000L,
+            Math.max(30, intervalSeconds) * 1000L
+        );
     }
 
     private ServerDescriptor descriptor() {
